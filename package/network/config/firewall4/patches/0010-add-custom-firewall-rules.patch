@@ -1,0 +1,47 @@
+--- a/root/etc/config/firewall
++++ b/root/etc/config/firewall
+@@ -132,7 +132,44 @@ config rule
+ 	option dest_port	500
+ 	option proto		udp
+ 	option target		ACCEPT
+ 
++# Custom rules for external access
++config rule
++	option name		'Allow-WAN-8000'
++	option src		'wan'
++	option dest_port	'8000'
++	option proto		'tcp'
++	option target		'ACCEPT'
++	option family		'ipv6'
++
++config rule
++	option name		'Allow-22223-Forward'
++	option src		'wan'
++	option dest		'lan'
++	option dest_port	'22223'
++	option proto		'tcpudp'
++	option target		'ACCEPT'
++
++config rule
++	option name		'Allow-FTP-21'
++	option src		'wan'
++	option dest_port	'21'
++	option proto		'tcp'
++	option target		'ACCEPT'
++
++config rule
++	option name		'Allow-36701'
++	option src		'wan'
++	option dest_port	'36701'
++	option proto		'tcp'
++	option target		'ACCEPT'
++
++config rule
++	option name		'Allow-36702'
++	option src		'wan'
++	option dest_port	'36702'
++	option proto		'tcp'
++	option target		'ACCEPT'
+ 
+ ### EXAMPLE CONFIG SECTIONS
+ # do not allow a specific ip to access wan

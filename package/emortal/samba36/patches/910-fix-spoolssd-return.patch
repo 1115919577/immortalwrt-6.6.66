@@ -1,0 +1,10 @@
+--- a/source3/printing/spoolssd.c
++++ b/source3/printing/spoolssd.c
+@@ -603,7 +603,7 @@
+ 
+ #ifndef PRINTER_SUPPORT
+-	return;
++	return -1;
+ #endif
+ 
+ 	DEBUG(1, ("Forking SPOOLSS Daemon\n"));

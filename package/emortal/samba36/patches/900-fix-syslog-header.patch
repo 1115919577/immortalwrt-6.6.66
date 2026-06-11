@@ -1,0 +1,10 @@
+--- a/source3/modules/vfs_default.c
++++ b/source3/modules/vfs_default.c
+@@ -19,7 +19,8 @@
+ */
+ 
+ #include "includes.h"
++#include <syslog.h>
+ #include "system/time.h"
+ #include "system/filesys.h"
+ #include "smbd/smbd.h
