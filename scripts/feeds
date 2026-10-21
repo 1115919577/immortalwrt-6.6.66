@@ -836,6 +836,20 @@ sub update_feed($$$$$$)
 		warn "failed.\n";
 		return 1;
 	};
+	
+	# 删除 nikki 源中的 mihomo-alpha 文件夹
+	if ($name eq "nikki") {
+		my $nikki_path = "./feeds/$name";
+		warn "DEBUG: Checking path $nikki_path\n";
+		if (-d $nikki_path) {
+			# 使用 find 命令递归查找并删除 mihomo-alpha
+			warn "Removing all mihomo-alpha directories from $nikki_path...\n";
+			system("find '$nikki_path' -type d -name 'mihomo-alpha' -exec rm -rf {} + 2>/dev/null");
+		} else {
+			warn "DEBUG: Path $nikki_path does not exist\n";
+		}
+	}
+	
 	return $rv;
 }
 

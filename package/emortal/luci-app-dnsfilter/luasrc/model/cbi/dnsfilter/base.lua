@@ -1,50 +1,52 @@
-local SYS = require "luci.sys"
+local SYS        = require "luci.sys"
+local fs         = require "nixio.fs"
+local http       = require "luci.http"
+local dispatcher = require "luci.dispatcher"
 
-m = Map("dnsfilter")
+local m = Map("dnsfilter")
 m.title = translate("DNS Filter")
 m.description = translate("Support AdGuardHome/Host/DNSMASQ/Domain Rules")
 m:section(SimpleSection).template = "dnsfilter/dnsfilter_status"
 
-s = m:section(TypedSection, "dnsfilter")
+local s = m:section(TypedSection, "dnsfilter")
 s.anonymous = true
 
-o = s:option(Flag, "enable", translate("Enable"))
+local o = s:option(Flag, "enable", translate("Enable"))
 o.rmempty = false
-
-o = s:option(Flag, "block_ios", translate("Block Apple iOS OTA update"))
-o.rmempty = false
-o.default = 0
-
-o = s:option(Flag, "block_cnshort", translate("Block CNshort APP and Website"))
-o.rmempty = false
-o.default = 0
-
-o = s:option(Flag, "safe_search", translate("Safe Search"))
-o.description = translate("Enforcing SafeSearch for Google Bing Duckduckgo Yandex and Youtube.")
-o.rmempty = false
-o.default = 0
 
 o = s:option(Flag, "cron_mode", translate("Enable automatic update rules"))
 o.rmempty = false
 o.default = 1
 
-o = s:option(ListValue, "time_update", translate("Update time (every day)"))
+o = s:option(ListValue, "update_day", translate("Update date"))
+o:value("*", translate("Every day"))
+o:value("1", translate("Every Monday"))
+o:value("2", translate("Every Tuesday"))
+o:value("3", translate("Every Wednesday"))
+o:value("4", translate("Every Thursday"))
+o:value("5", translate("Every Friday"))
+o:value("6", translate("Every Saturday"))
+o:value("0", translate("Every Sunday"))
+o.default = "*"
+o:depends("cron_mode",1)
+
+o = s:option(ListValue, "time_update", translate("Update time"))
 for s = 0,23 do
 o:value(s, s .. ':00')
 end
 o.default = 6
 o:depends("cron_mode",1)
 
-tmp_rule = 0
-if nixio.fs.access("/tmp/dnsfilter/rules.conf") then
-tmp_rule = 1
-UD = SYS.exec("cat /tmp/dnsfilter/dnsfilter.updated 2>/dev/null")
-rule_count = tonumber(SYS.exec("find /tmp/dnsfilter -exec cat {} \\; 2>/dev/null | wc -l"))
-o = s:option(DummyValue, "1", translate("Subscribe Rules Data"))
-o.rawhtml = true
-o.template = "dnsfilter/dnsfilter_refresh"
-o.value = rule_count.." "..translate("Records")
-o.description = string.format(translate("AdGuardHome / Host / DNSMASQ / Domain rules auto-convert").."<br/><strong>"..translate("Last Update Checked")..":</strong> %s<br/>",UD)
+local tmp_rule = 0
+if fs.access("/tmp/dnsfilter/rules.conf") then
+	tmp_rule = 1
+	local UD = SYS.exec("cat /tmp/dnsfilter/dnsfilter.updated 2>/dev/null")
+	local rule_count = tonumber(SYS.exec("cat /tmp/dnsfilter/rules.conf 2>/dev/null | wc -l")) or 0
+	o = s:option(DummyValue, "1", translate("Subscribe Rules Data"))
+	o.rawhtml = true
+	o.template = "dnsfilter/dnsfilter_refresh"
+	o.value = rule_count.." "..translate("Records")
+	o.description = string.format(translate("AdGuardHome / Host / DNSMASQ / Domain rules auto-convert").."<br/><strong>"..translate("Last Update Checked")..":</strong> %s<br/>",UD)
 end
 
 o = s:option(Flag, "flash", translate("Save rules to flash"))
@@ -58,18 +60,18 @@ o.inputstyle = "reset"
 o.description = translate("Delete rules files and delete the subscription link<br/>There is no need to click for modify the subscription link,The script will automatically replace the old rule file")
 o.write = function()
 	SYS.exec("[ -d /etc/dnsfilter/rules ] && rm -rf /etc/dnsfilter/rules")
-	SYS.exec("grep -wq 'list url' /etc/config/dnsfilter && sed -i '/list url/d' /etc/config/dnsfilter && /etc/init.d/dnsfilter restart 2>&1 &")
-	luci.http.redirect(luci.dispatcher.build_url("admin", "services", "dnsfilter", "base"))
+	SYS.exec("grep -wq 'list url' /etc/config/dnsfilter && sed -i '/list url/d' /etc/config/dnsfilter && /etc/init.d/dnsfilter restart >/dev/null 2>&1 &")
+	http.redirect(dispatcher.build_url("admin", "services", "dnsfilter", "base"))
 end
 end
 
-if luci.sys.call("[ -h /tmp/dnsfilter/url ] || exit 9") == 9 then
-	if nixio.fs.access("/etc/dnsfilter/rules") then
+if SYS.call("[ -h /tmp/dnsfilter/url ] || exit 9") == 9 then
+	if fs.access("/etc/dnsfilter/rules") then
 		o = s:option(Button, "delete_1", translate("Delete Subscribe Rules On The Flash"))
 		o.inputstyle = "reset"
 		o.write = function()
 			SYS.exec("rm -rf /etc/dnsfilter/rules")
-			luci.http.redirect(luci.dispatcher.build_url("admin", "services", "dnsfilter", "base"))
+			http.redirect(dispatcher.build_url("admin", "services", "dnsfilter", "base"))
 		end
 	end
 end

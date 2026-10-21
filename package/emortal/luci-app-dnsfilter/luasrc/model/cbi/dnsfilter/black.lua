@@ -1,8 +1,9 @@
 local fs = require "nixio.fs"
+local sys = require "luci.sys"
 local conffile = "/etc/dnsfilter/black.list"
 
-f = SimpleForm("custom")
-t = f:field(TextValue, "conf")
+local f = SimpleForm("custom")
+local t = f:field(TextValue, "conf")
 t.rmempty = true
 t.rows = 13
 t.description = translate("Will Always block these Domain")
@@ -16,9 +17,9 @@ function f.handle(self,state,data)
 		if data.conf then
 			fs.writefile(conffile,data.conf:gsub("\r\n","\n"))
 		else
-			luci.sys.call("> /etc/dnsfilter/black.list")
+			sys.call("> /etc/dnsfilter/black.list")
 		end
-		luci.sys.exec("[ \"$(uci -q get dnsfilter.@dnsfilter[0].enable)\" = 1 ] && /etc/init.d/dnsfilter restart")
+		sys.exec("[ \"$(uci -q get dnsfilter.@dnsfilter[0].enable)\" = '1' ] && /etc/init.d/dnsfilter restart >/dev/null 2>&1 &")
 	end
 	return true
 end

@@ -1,8 +1,9 @@
 local fs = require "nixio.fs"
+local sys = require "luci.sys"
 local conffile = "/etc/dnsfilter/white.list"
 
-f = SimpleForm("custom")
-t = f:field(TextValue, "conf")
+local f = SimpleForm("custom")
+local t = f:field(TextValue, "conf")
 t.rmempty = true
 t.rows = 13
 t.description = translate("Will Never filter these Domain")
@@ -16,11 +17,9 @@ function f.handle(self,state,data)
 		if data.conf then
 			fs.writefile(conffile,data.conf:gsub("\r\n","\n"))
 		else
-			luci.sys.call("> /etc/dnsfilter/white.list")
+			sys.call("> /etc/dnsfilter/white.list")
 		end
-		luci.sys.exec("for i in $(cat /etc/dnsfilter/white.list);do sed -i -e \"/\\/$i\\//d\" -e \"/\\.$i\\//d\" /tmp/dnsfilter/rules.conf 2>/dev/null;\\\
-		[ -s /etc/dnsfilter/rules/rules.conf ] && sed -i -e \"/\\/$i\\//d\" -e \"/\\.$i\\//d\" /etc/dnsfilter/rules/rules.conf;done;\\\
-		[ -s /tmp/dnsfilter/rules.conf ] && rm -f /tmp/dnsmasq.dnsfilter/rules.conf && /etc/init.d/dnsfilter start")
+		sys.exec("[ \"$(uci -q get dnsfilter.@dnsfilter[0].enable)\" = '1' ] && /etc/init.d/dnsfilter restart >/dev/null 2>&1 &")
 	end
 	return true
 end

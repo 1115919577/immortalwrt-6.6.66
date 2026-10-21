@@ -2,20 +2,44 @@
 [ "$1" = --down ] || exit 1
 # 防止重复启动
 LOCK=/var/lock/dnsfilter.lock
-[ -f $LOCK ] && exit 1
-touch $LOCK
+[ -f "$LOCK" ] && exit 1
+touch "$LOCK"
 
 B=/tmp/dnsfilter
 C=/tmp/adupdate.log
 D="date +'%Y-%m-%d %H:%M:%S'"
-E="curl -kLfso"
 G="Download Subscribe Rules"
+MAX_LOG_LINES=2000
+
+mkdir -p "$B"
+
+trim_log(){
+	[ -f "$C" ] || return 0
+	lines="$(wc -l < "$C" 2>/dev/null)"
+	case "$lines" in
+		''|*[!0-9]*) return 0 ;;
+	esac
+	[ "$lines" -le "$MAX_LOG_LINES" ] && return 0
+	tail -n "$MAX_LOG_LINES" "$C" > "$C.tmp" && mv -f "$C.tmp" "$C"
+}
 
 if [ "$2" = 1 ];then
-	echo "`eval $D` [$G]" >> $C
-	/usr/share/dnsfilter/dnsfilter addown >> $C
+	echo "`eval $D` [$G]" >> "$C"
+	TMP_LOG="/tmp/dnsfilter.addown.$$"
+	/usr/share/dnsfilter/dnsfilter addown > "$TMP_LOG" 2>&1
+	RET="$?"
+	grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} \[' "$TMP_LOG" >> "$C" 2>/dev/null
+	rm -f "$TMP_LOG"
+	[ "$RET" = "0" ] || {
+		echo "`eval $D` [Download failed, abort]" >> "$C"
+		trim_log
+		rm -f "$LOCK"
+		exit 1
+	}
 fi
 
-echo "`eval $D` [Start DNSFilter]" >> $C;echo `eval $D` > $B/dnsfilter.updated
-rm -f $LOCK
+echo "`eval $D` [Start DNSFilter]" >> "$C"
+trim_log
+echo "`eval $D`" > "$B/dnsfilter.updated"
+rm -f "$LOCK"
 /etc/init.d/dnsfilter start &

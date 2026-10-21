@@ -1,10 +1,15 @@
 local o = require "luci.dispatcher"
 local e = require ("luci.model.ipkg")
 local s = require "nixio.fs"
+local http = require "luci.http"
 local e = luci.model.uci.cursor()
 local i = "frp"
 local a, t, e
 local n = {}
+
+if http.formvalue("clear_log") == "1" then
+	s.writefile("/var/etc/frp/frpc.log", "")
+end
 
 a = Map("frp")
 a.title = translate("Frp Setting")
@@ -17,6 +22,7 @@ t.anonymous = true
 t.addremove = false
 
 t:tab("base", translate("Basic Settings"))
+t:tab("auth", translate("Authentication"))
 t:tab("other", translate("Other Settings"))
 t:tab("log", translate("Client Log"))
 
@@ -30,12 +36,6 @@ e.rmempty = false
 e = t:taboption("base", Value, "server_port", translate("Port"))
 e.datatype = "port"
 e.optional = false
-e.rmempty = false
-
-e = t:taboption("base", Value, "token", translate("Token"))
-e.description = translate("Time duration between server of frpc and frps mustn't exceed 15 minutes.")
-e.optional = false
-e.password = true
 e.rmempty = false
 
 e = t:taboption("base", Value, "user", translate("User"))
@@ -57,6 +57,41 @@ e.description = translate("0 means disable this feature, unit: min")
 e.datatype = "range(0,59)"
 e.default = 30
 e.rmempty = false
+
+e = t:taboption("auth", ListValue, "auth_method", translate("Authentication Method"))
+e.description = translate("Select the authentication method used to connect to frps. Token is the traditional method. OIDC requires an OIDC provider.")
+e.default = "token"
+e:value("token", translate("Token Authentication"))
+e:value("oidc", translate("OIDC Authentication"))
+
+e = t:taboption("auth", Value, "token", translate("Token"))
+e.description = translate("Time duration between server of frpc and frps mustn't exceed 15 minutes.")
+e.optional = true
+e.password = true
+e:depends("auth_method", "token")
+
+e = t:taboption("auth", Value, "oidc_client_id", translate("OIDC Client ID"))
+e.description = translate("The client ID registered at the OIDC provider.")
+e:depends("auth_method", "oidc")
+
+e = t:taboption("auth", Value, "oidc_client_secret", translate("OIDC Client Secret"))
+e.description = translate("The client secret issued by the OIDC provider. Leave empty if your OIDC provider does not require it.")
+e:depends("auth_method", "oidc")
+e.password = true
+
+e = t:taboption("auth", Value, "oidc_token_endpoint_url", translate("OIDC Token Endpoint URL"))
+e.description = translate("The token endpoint URL of the OIDC provider, e.g. https://example.com/oidc/token")
+e.placeholder = "https://www.afrp.net/oidc/token.php"
+e:depends("auth_method", "oidc")
+
+e = t:taboption("auth", Value, "oidc_audience", translate("OIDC Audience"))
+e.description = translate("The audience claim expected by the OIDC provider.")
+e:depends("auth_method", "oidc")
+
+e = t:taboption("auth", Value, "oidc_scope", translate("OIDC Scope"))
+e.description = translate("The scope to request from the OIDC provider.")
+e.placeholder = "afrp"
+e:depends("auth_method", "oidc")
 
 e = t:taboption("other", Flag, "login_fail_exit", translate("Exit program when first login failed"))
 e.description = translate("decide if exit program when first login failed, otherwise continuous relogin to frps.")
@@ -160,14 +195,17 @@ e.default = "admin"
 e.password = true
 e:depends("admin_enable", 1)
 
-e = t:taboption("log", TextValue, "log")
-e.rows = 26
-e.wrap = "off"
-e.readonly = true
-e.cfgvalue = function(t,t)
-return s.readfile("/var/etc/frp/frpc.log")or""
-end
-e.write = function(e,e,e)
+e = t:taboption("log", DummyValue, "_log_view")
+e.rawhtml = true
+function e.cfgvalue()
+	local log = s.readfile("/var/etc/frp/frpc.log") or ""
+	return '<div style="text-align:left;margin:0 0 10px 0;">' ..
+		'<button type="submit" class="cbi-button cbi-button-reset" name="clear_log" value="1">' ..
+		translate("Clear Log") ..
+		'</button></div>' ..
+		'<textarea class="cbi-textarea cbi-input-textarea" style="width:100%;color:#666;" rows="26" wrap="off" readonly="readonly">' ..
+		luci.xml.pcdata(log) ..
+		'</textarea>'
 end
 
 t = a:section(TypedSection, "proxy", translate("Services List"))

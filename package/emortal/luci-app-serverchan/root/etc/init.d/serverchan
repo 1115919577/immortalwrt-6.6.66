@@ -3,6 +3,10 @@
 START=99
 STOP=10
 
+# 让 "保存并应用" 能在不重启路由器的情况下生效
+EXTRA_COMMANDS="reload"
+EXTRA_HELP="        reload  Reload (restart) serverchan after config change"
+
 start() {
 	state=`pgrep -f "/usr/bin/serverchan/serverchan"`
 	if [ ! -z "$state" ]; then
@@ -23,4 +27,16 @@ restart(){
 	sleep 1
 	start
 	echo "restarted."
+}
+
+# 当 uci 配置 "serverchan" (/etc/config/serverchan) 发生变化(uci commit)时，
+# procd 会自动调用 "/etc/init.d/serverchan reload"。
+# 老版本依赖的 ucitrack 的 "/etc/config/ucitrack" 注册方式在新版
+# OpenWrt/ImmortalWrt(24.10) 中已不再被读取，必须用本方式代替。
+service_triggers() {
+	procd_add_reload_trigger "serverchan"
+}
+
+reload_service() {
+	restart
 }

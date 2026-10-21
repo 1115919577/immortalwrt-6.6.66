@@ -5,7 +5,10 @@
 
 src-link packages ../extra/packages
 src-link luci ../extra/luci
+src-link routing ../extra/routing
+src-link telephony ../extra/telephony
+
 src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
-src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall
+src-git --force passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall
 src-git nikki https://github.com/nikkinikki-org/OpenWrt-nikki
 src-git OpenClash https://github.com/vernesong/OpenClash

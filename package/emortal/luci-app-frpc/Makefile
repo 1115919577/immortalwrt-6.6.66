@@ -11,8 +11,8 @@ LUCI_DEPENDS:=+wget +frpc +luci-lib-ipkg
 LUCI_PKGARCH:=all
 
 PKG_NAME:=luci-app-frpc
-PKG_VERSION:=1.4
-PKG_RELEASE:=2
+PKG_VERSION:=1.6
+PKG_RELEASE:=6
 
 include $(TOPDIR)/feeds/luci/luci.mk
 

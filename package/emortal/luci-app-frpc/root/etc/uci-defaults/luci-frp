@@ -1,11 +1,15 @@
 #!/bin/sh
 
-uci -q batch <<-EOF >/dev/null
-	delete ucitrack.@frp[-1]
-	add ucitrack frp
-	set ucitrack.@frp[-1].init=frp
-	commit ucitrack
-EOF
+# 说明：旧版本这里通过 `uci batch ... add ucitrack frp ...` 向
+# /etc/config/ucitrack 写入触发器配置。但新版 OpenWrt/ImmortalWrt(>=21.02 之后)
+# 的 /etc/init.d/ucitrack 已改为只读取 /usr/share/ucitrack/*.json，
+# 不再读取 /etc/config/ucitrack 里的 uci 配置项，因此这种写法在新系统上完全失效，
+# 已删除。真正的触发器现在由 /etc/init.d/frp 自身的 service_triggers() 注册，
+# /usr/share/ucitrack/frp.json 作为额外的双重保险。
+
+# 清理旧版本残留的失效配置（如果存在）
+uci -q delete ucitrack.@frp[-1] 2>/dev/null
+uci -q commit ucitrack 2>/dev/null
 
 rm -f /tmp/luci-indexcache
 exit 0

@@ -1,6 +1,8 @@
 
 config dnsfilter
 	option cron_mode '1'
+	option update_day '*'
 	option time_update '6'
 	option flash '0'
 	option enable '0'
+	list url 'https://anti-ad.net/anti-ad-for-dnsmasq.conf'

@@ -16,14 +16,38 @@ msgstr "未运行"
 msgid "Enable"
 msgstr "启用"
 
-msgid "Block Apple iOS OTA update"
-msgstr "拦截 Apple iOS 的OTA 更新"
-
-msgid "Block CNshort APP and Website"
-msgstr "拦截 短视频 APP 和网站"
-
 msgid "Enable automatic update rules"
 msgstr "启用规则自动更新"
+
+msgid "Update date"
+msgstr "更新日期"
+
+msgid "Every day"
+msgstr "每天"
+
+msgid "Every Monday"
+msgstr "每周一"
+
+msgid "Every Tuesday"
+msgstr "每周二"
+
+msgid "Every Wednesday"
+msgstr "每周三"
+
+msgid "Every Thursday"
+msgstr "每周四"
+
+msgid "Every Friday"
+msgstr "每周五"
+
+msgid "Every Saturday"
+msgstr "每周六"
+
+msgid "Every Sunday"
+msgstr "每周日"
+
+msgid "Update time"
+msgstr "更新时间"
 
 msgid "Update time (every day)"
 msgstr "更新时间 (每天)"
@@ -97,11 +121,11 @@ msgstr "IP 黑名单"
 msgid "Will Always block these IP"
 msgstr "拦截黑名单内的 IP 地址"
 
-msgid "Safe Search"
-msgstr "安全搜索"
-
-msgid "Enforcing SafeSearch for Google Bing Duckduckgo Yandex and Youtube."
-msgstr "强制为 Google Bing Duckduckgo Yandex Youtube 开启安全搜索,过滤不健康内容"
-
 msgid "Update Log"
 msgstr "更新日志"
+
+msgid "Clear Log"
+msgstr "清空日志"
+
+msgid "Collecting data..."
+msgstr "正在收集数据..."

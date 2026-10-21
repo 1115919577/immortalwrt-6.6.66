@@ -1,7 +1,11 @@
 module("luci.controller.dnsfilter", package.seeall)
 
+local fs   = require "nixio.fs"
+local http = require "luci.http"
+local sys  = require "luci.sys"
+
 function index()
-	if not nixio.fs.access("/etc/config/dnsfilter") then
+	if not fs.access("/etc/config/dnsfilter") then
 		return
 	end
 
@@ -20,32 +24,48 @@ end
 
 function act_status()
 	local e = {}
-	e.running = luci.sys.call("[ -s /tmp/dnsmasq.d/dnsmasq.dnsfilter/rules.conf ]") == 0
-	luci.http.prepare_content("application/json")
-	luci.http.write_json(e)
+	e.running = sys.call([[
+		cfg="$(uci -q show dhcp.@dnsmasq[0] | awk 'NR==1 {split($0, conf, /[.=]/); print conf[2]}')"
+		dir="/tmp/dnsmasq.d"
+		if [ -n "$cfg" ] && [ -f "/tmp/etc/dnsmasq.conf.$cfg" ]; then
+			d="$(awk -F '=' '/^conf-dir=/ {print $2}' "/tmp/etc/dnsmasq.conf.$cfg" | tail -n 1)"
+			d="${d%%,*}"
+			d="${d%*/}"
+			[ -n "$d" ] && dir="$d"
+		fi
+		[ -s "$dir/dnsfilter.rules.conf" ] ||
+		[ -s /tmp/dnsmasq.d/dnsfilter.rules.conf ] ||
+		[ -s /var/dnsmasq.d/dnsfilter.rules.conf ] ||
+		nft list table inet dnsfilter >/dev/null 2>&1
+	]]) == 0
+	http.prepare_content("application/json")
+	http.write_json(e)
 end
 
 function refresh_data()
-local set = luci.http.formvalue("set")
-local icount = 0
+	local icount = 0
+	local newhash = ""
+	local oldhash = ""
+	local retstring = "-1"
 
-	luci.sys.exec("/usr/share/dnsfilter/dnsfilter down")
-	icount = luci.sys.exec("find /tmp/ad_tmp -type f -name rules.conf -exec cat {} \\; 2>/dev/null | wc -l")
+	sys.exec("/usr/share/dnsfilter/dnsfilter down")
+	icount = sys.exec("cat /tmp/ad_tmp/rules.conf 2>/dev/null | wc -l")
 	if tonumber(icount)>0 then
-		oldcount = luci.sys.exec("find /tmp/dnsfilter -type f -name rules.conf -exec cat {} \\; 2>/dev/null | wc -l")
-		if tonumber(icount) ~= tonumber(oldcount) then
-			luci.sys.exec("[ -h /tmp/dnsfilter/url ] && (rm -f /etc/dnsfilter/rules/*;cp -a /tmp/ad_tmp/* /etc/dnsfilter/rules) || (rm -f /tmp/dnsfilter/*;cp -a /tmp/ad_tmp/* /tmp/dnsfilter)")
-			luci.sys.exec("/etc/init.d/dnsfilter restart &")
+		newhash = sys.exec("md5sum /tmp/ad_tmp/rules.conf 2>/dev/null | awk '{print $1}'"):gsub("%s+$", "")
+		oldhash = sys.exec("md5sum /tmp/dnsfilter/rules.conf 2>/dev/null | awk '{print $1}'"):gsub("%s+$", "")
+		if newhash ~= oldhash then
+			sys.exec("[ -h /tmp/dnsfilter/url ] && (mkdir -p /etc/dnsfilter/rules;rm -f /etc/dnsfilter/rules/*;cp -a /tmp/ad_tmp/* /etc/dnsfilter/rules) || (mkdir -p /tmp/dnsfilter;rm -f /tmp/dnsfilter/*;cp -a /tmp/ad_tmp/* /tmp/dnsfilter)")
+			sys.exec("/etc/init.d/dnsfilter restart >/dev/null 2>&1 &")
 			retstring = tostring(math.ceil(tonumber(icount)))
 		else
 			retstring = 0
 		end
-		luci.sys.call("echo `date +'%Y-%m-%d %H:%M:%S'` > /tmp/dnsfilter/dnsfilter.updated")
+		sys.call("mkdir -p /tmp/dnsfilter && date +'%Y-%m-%d %H:%M:%S' > /tmp/dnsfilter/dnsfilter.updated")
 	else
 		retstring = "-1"
 	end
-	luci.sys.exec("rm -rf /tmp/ad_tmp")
+	sys.exec("rm -rf /tmp/ad_tmp")
 
-	luci.http.prepare_content("application/json")
-	luci.http.write_json({ret=retstring,retcount=icount})
+	http.prepare_content("application/json")
+	http.write_json({ret=retstring,retcount=icount})
 end

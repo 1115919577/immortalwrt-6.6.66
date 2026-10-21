@@ -1,5 +1,8 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-only
+# uci-defaults for luci-app-turboacc (firewall4 / nftables)
 
+# Register ucitrack so LuCI's "Save & Apply" reloads the turboacc service.
 uci -q batch <<-EOF >/dev/null
 	delete ucitrack.@turboacc[-1]
 	add ucitrack turboacc
@@ -7,10 +10,42 @@ uci -q batch <<-EOF >/dev/null
 	commit ucitrack
 EOF
 
-[ -n "$(lsmod | grep mtkhnat)" ] && \
-	uci set turboacc.config.sw_flow='0' && \
-	uci set turboacc.config.hw_flow='0'
+# 兼容旧版匿名配置段，统一为 turboacc.config，避免 LuCI 保存后 init 读不到。
+if ! uci -q get turboacc.config >/dev/null 2>&1; then
+	uci -q rename turboacc.@turboacc[0]=config 2>/dev/null || uci -q set turboacc.config=turboacc
+fi
 
-uci commit turboacc
+# Migrate legacy single-selector "offloading_type" into independent flags.
+legacy_type="$(uci -q get turboacc.config.offloading_type)"
+case "${legacy_type}" in
+	"1")
+		uci -q set turboacc.config.sw_flow='1'
+		uci -q set turboacc.config.hw_flow='0'
+		;;
+	"2")
+		uci -q set turboacc.config.sw_flow='1'
+		uci -q set turboacc.config.hw_flow='1'
+		;;
+	"0")
+		uci -q set turboacc.config.sw_flow='0'
+		uci -q set turboacc.config.hw_flow='0'
+		;;
+esac
+uci -q delete turboacc.config.offloading_type
+
+# firewall4 requires software flow offloading when hardware flow offloading is enabled.
+if [ "$(uci -q get turboacc.config.sw_flow)" != "1" ]; then
+	uci -q set turboacc.config.hw_flow='0'
+fi
+
+# Drop other legacy options to keep config clean across upgrades.
+uci -q delete turboacc.config.sfe_flow
+
+uci -q commit turboacc
+
+# 启用 turboacc 服务，确保 /etc/rc.d/S90turboacc 软链接存在，
+# 这样 LuCI “系统 > 启动项”里 turboacc 行才能显示为已启用，
+# 并且系统重启后会自动把 sw/hw flow offloading 等设置写回 firewall4。
+/etc/init.d/turboacc enable >/dev/null 2>&1
 
 exit 0

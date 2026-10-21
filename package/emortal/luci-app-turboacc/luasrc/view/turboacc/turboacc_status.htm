@@ -1,22 +1,47 @@
 <fieldset class="cbi-section">
 	<legend><%:Running Status%></legend>
 	<table width="100%" cellspacing="10" id="_turboacc_status_table">
-		<tr><td width="33%"><%:Flow Offloading%></td><td id="_fastpath_state"><em><%:Collecting data...%></em></td></tr>
+		<tr id="_fastpath_row" style="display:none"><td width="33%"><%:Flow Offloading Type%></td><td id="_fastpath_state"><em><%:Collecting data...%></em></td></tr>
+		<tr id="_sw_flow_row" style="display:none"><td width="33%"><%:Software Flow Offloading%></td><td id="_sw_flow_state"><em><%:Collecting data...%></em></td></tr>
+		<tr id="_hw_flow_row" style="display:none"><td width="33%"><%:Hardware Flow Offloading%></td><td id="_hw_flow_state"><em><%:Collecting data...%></em></td></tr>
 		<tr><td width="33%"><%:FullCone NAT%></td><td id="_fullconenat_state"><em><%:Collecting data...%></em></td></tr>
 		<tr><td width="33%"><%:BBR CCA%></td><td id="_bbr_state"><em><%:Collecting data...%></em></td></tr>
 	</table>
 </fieldset>
 
 <script type="text/javascript">//<![CDATA[
-	var fastpath_state = document.getElementById('_fastpath_state');
-	var bbr_state = document.getElementById('_bbr_state');
+	var fastpath_row      = document.getElementById('_fastpath_row');
+	var fastpath_state    = document.getElementById('_fastpath_state');
+	var sw_flow_row       = document.getElementById('_sw_flow_row');
+	var sw_flow_state     = document.getElementById('_sw_flow_state');
+	var hw_flow_row       = document.getElementById('_hw_flow_row');
+	var hw_flow_state     = document.getElementById('_hw_flow_state');
 	var fullconenat_state = document.getElementById('_fullconenat_state');
-	XHR.poll(5, '<%=luci.dispatcher.build_url("admin", "network", "turboacc", "status")%>', null, function(x, status) {
-		if ( x && x.status == 200 ) {
-			fastpath_state.innerHTML = status.fastpath_state ? '<em><b><font color=green><%=luci.sys.exec("/etc/init.d/turboacc check_status fastpath")%></font></b></em>' : '<em><b><font color=red><%:NOT RUNNING%></font></b></em>';
-			fullconenat_state.innerHTML = status.fullconenat_state ? '<em><b><font color=green><%:RUNNING%></font></b></em>' : '<em><b><font color=red><%:NOT RUNNING%></font></b></em>';
-			bbr_state.innerHTML = status.bbr_state ? '<em><b><font color=green><%:RUNNING%></font></b></em>' : '<em><b><font color=red><%:NOT RUNNING%></font></b></em>';
-		}
-	});
+	var bbr_state         = document.getElementById('_bbr_state');
+
+	var html_running = '<em><b><font color="green"><%:RUNNING%></font></b></em>';
+	var html_stopped = '<em><b><font color="red"><%:NOT RUNNING%></font></b></em>';
+
+	XHR.poll(5, '<%=luci.dispatcher.build_url("admin", "network", "turboacc", "status")%>', null,
+		function(x, status) {
+			if (!x || x.status != 200 || !status) return;
+
+			fastpath_row.style.display = status.fastpath_visible ? '' : 'none';
+			if (status.fastpath_visible)
+				fastpath_state.innerHTML = status.fastpath_state
+					? '<em><b><font color="green">' + (status.fastpath_text || '<%:RUNNING%>') + '</font></b></em>'
+					: html_stopped;
+
+			sw_flow_row.style.display = status.sw_flow_visible ? '' : 'none';
+			hw_flow_row.style.display = status.hw_flow_visible ? '' : 'none';
+
+			if (status.sw_flow_visible)
+				sw_flow_state.innerHTML = status.sw_flow_state ? html_running : html_stopped;
+			if (status.hw_flow_visible)
+				hw_flow_state.innerHTML = status.hw_flow_state ? html_running : html_stopped;
+
+			fullconenat_state.innerHTML = status.fullconenat_state ? html_running : html_stopped;
+			bbr_state.innerHTML         = status.bbr_state         ? html_running : html_stopped;
+		});
 //]]>
-//]]></script>
+</script>

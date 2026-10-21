@@ -6,6 +6,14 @@ START=99
 SERVICE_WRITE_PID=1
 SERVICE_DAEMONIZE=1
 
+# 让 "保存并应用" 能在不重启路由器的情况下生效：
+# 1. EXTRA_COMMANDS/EXTRA_HELP 声明本脚本支持 reload 动作
+# 2. reload_service 定义具体执行内容（这里直接等同于 restart）
+# 3. service_triggers 让 procd 在 /etc/config/frp 发生变化(uci commit)时
+#    自动调用 "/etc/init.d/frp reload"，这正是 LuCI "保存并应用" 缺失的一环
+EXTRA_COMMANDS="reload"
+EXTRA_HELP="        reload  Reload (restart) frpc after config change"
+
 LOGFILE="/var/etc/frp/frpc.log"
 
 echo_date(){
@@ -184,12 +192,27 @@ boot() {
 	start
 }
 
+# 当 uci 配置 "frp" (即 /etc/config/frp) 发生变化(uci commit)时，
+# procd 会自动调用 "/etc/init.d/frp reload"。
+# 这是 LuCI 点击"保存并应用"后真正触发服务重启的关键钩子，
+# 老版本依赖的 ucitrack 的 "/etc/config/ucitrack" 注册方式
+# 在新版 OpenWrt/ImmortalWrt(24.10) 中已不再被读取，必须用本方式代替。
+service_triggers() {
+	procd_add_reload_trigger "frp"
+}
+
+reload_service() {
+	stop
+	start
+}
+
 start() {
 
 	config_load "frp"
 	local enabled server_addr server_port time privilege_token user tcp_mux enable_cpool tls_enable
 	local pool_count log_level log_max_days login_fail_exit http_proxy protocol admin_port admin_user admin_pwd
 	local tls_cert_file tls_key_file tls_trusted_ca_file
+	local auth_method oidc_client_id oidc_client_secret oidc_token_endpoint_url oidc_audience oidc_scope
 
 	config_get_bool enabled common enabled 1
 
@@ -212,6 +235,12 @@ start() {
 	config_get tls_cert_file common tls_cert_file
 	config_get tls_key_file common tls_key_file
 	config_get tls_trusted_ca_file common tls_trusted_ca_file
+	config_get auth_method common auth_method
+	config_get oidc_client_id common oidc_client_id
+	config_get oidc_client_secret common oidc_client_secret
+	config_get oidc_token_endpoint_url common oidc_token_endpoint_url
+	config_get oidc_audience common oidc_audience
+	config_get oidc_scope common oidc_scope
 
 
 	mkdir -p /var/etc/frp
@@ -225,7 +254,16 @@ start() {
 	echo "[common]" >$tmpconf
 	echo "server_addr=${server_addr}" >>$tmpconf
 	echo "server_port=${server_port}" >>$tmpconf
-	echo "token=${token}" >>$tmpconf
+	if [ "$auth_method" = "oidc" ]; then
+		echo "authentication_method=oidc" >>$tmpconf
+		[ -n "$oidc_client_id" ] && echo "oidc_client_id=$oidc_client_id" >>$tmpconf
+		[ -n "$oidc_client_secret" ] && echo "oidc_client_secret=$oidc_client_secret" >>$tmpconf
+		[ -n "$oidc_token_endpoint_url" ] && echo "oidc_token_endpoint_url=$oidc_token_endpoint_url" >>$tmpconf
+		[ -n "$oidc_audience" ] && echo "oidc_audience=$oidc_audience" >>$tmpconf
+		[ -n "$oidc_scope" ] && echo "oidc_scope=$oidc_scope" >>$tmpconf
+	else
+		echo "token=${token}" >>$tmpconf
+	fi
 	[ -n "$user" ] && echo "user=$user" >>$tmpconf
 	echo "log_level=${log_level}" >>$tmpconf
 	echo "log_max_days=${log_max_days}" >>$tmpconf
@@ -249,7 +287,7 @@ start() {
 	[ "$(cat "$tmpconf" | grep -c "type=")" -gt 0 ] || (echo_date "frp服务启动失败，请首先添加服务列表！" && exit 0)
 	logger -t FRPC 'Starting frp service'
 	SERVICE_DAEMONIZE=1 \
-		service_start /usr/bin/frpc -c $tmpconf
+		service_start /usr/bin/env TZ="Asia/Shanghai" /usr/bin/frpc -c $tmpconf
 
 	[ "$time" -gt 0 ] && frp_add_cru $time
 	[ -z "$(pgrep /usr/bin/frpc)" ] && echo_date "frp服务启动失败，请检查服务端 “TCP多路复用(tcp_mux)”设置，确保与客户端完全一致！"
@@ -259,10 +297,22 @@ start() {
 
 stop() {
 	frp_del_cru
-	if [ -n "`pidof frpc`" ]; then
+
+	if [ -n "$(pidof frpc)" ]; then
 		logger -t FRPC 'Shutting down frp service'
+
 		service_stop /usr/bin/frpc
+
+		local i
+		for i in 1 2 3; do
+			[ -z "$(pidof frpc)" ] && break
+			[ "$i" = "2" ] && killall frpc 2>/dev/null
+			[ "$i" = "3" ] && killall -9 frpc 2>/dev/null
+			sleep 1
+		done
+
 		Reduce_Log $LOGFILE
 	fi
+
 	return 0
 }

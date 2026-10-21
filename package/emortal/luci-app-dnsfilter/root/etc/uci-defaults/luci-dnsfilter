@@ -5,13 +5,25 @@ uci -q batch <<-EOF >/dev/null
 	set ucitrack.@dnsfilter[-1].init=dnsfilter
 	commit ucitrack
 	delete firewall.dnsfilter
-	set firewall.dnsfilter=include
-	set firewall.dnsfilter.type=script
-	set firewall.dnsfilter.path=/var/etc/dnsfilter.include
-	set firewall.dnsfilter.reload=1
+	delete dnsfilter.@dnsfilter[0].block_ios
+	delete dnsfilter.@dnsfilter[0].block_cnshort
+	delete dnsfilter.@dnsfilter[0].safe_search
+	commit dnsfilter
 	commit firewall
 EOF
 
+[ -n "$(uci -q get dnsfilter.@dnsfilter[0].update_day)" ] || {
+	uci -q set dnsfilter.@dnsfilter[0].update_day='*'
+	uci -q commit dnsfilter
+}
+
+[ -n "$(uci -q get dnsfilter.@dnsfilter[0].url)" ] || {
+	uci -q add_list dnsfilter.@dnsfilter[0].url='https://anti-ad.net/anti-ad-for-dnsmasq.conf'
+	uci -q commit dnsfilter
+}
+
+mkdir -p /etc/dnsfilter
+touch /etc/dnsfilter/black.list /etc/dnsfilter/white.list /etc/dnsfilter/ip.list
 chmod 755 /etc/init.d/dnsfilter /usr/share/dnsfilter/* >/dev/null 2>&1
 rm -rf /tmp/luci-*
 exit 0

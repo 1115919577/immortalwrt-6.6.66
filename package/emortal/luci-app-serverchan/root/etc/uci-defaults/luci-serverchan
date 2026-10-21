@@ -1,11 +1,15 @@
 #!/bin/sh
 
-uci -q batch <<-EOF >/dev/null
-	delete ucitrack.@serverchan[-1]
-	add ucitrack serverchan
-	set ucitrack.@serverchan[-1].init=serverchan
-	commit ucitrack
-EOF
+# 旧版本通过 `uci batch ... add ucitrack serverchan ...` 写入
+# /etc/config/ucitrack，但新版 OpenWrt/ImmortalWrt 的 ucitrack
+# 已改为只读取 /usr/share/ucitrack/*.json，不再读取这种 uci 配置，
+# 因此该写法在新系统上完全失效，已删除。
+# 真正的触发器现在由 /etc/init.d/serverchan 自身的 service_triggers() 注册，
+# /usr/share/ucitrack/luci-app-serverchan.json 作为额外的双重保险。
+
+# 清理旧版本残留的失效配置（如果存在）
+uci -q delete ucitrack.@serverchan[-1] 2>/dev/null
+uci -q commit ucitrack 2>/dev/null
 
 rm -rf /tmp/luci-*
 exit 0

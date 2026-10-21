@@ -696,34 +696,34 @@ function ip_changes(){
 		local last_IPv4=$(cat "${dir}ip"|grep IPv4|awk '{print $2}'|grep -v "^$"|sort -u|head -n1)
 		local last_IPv6=$(cat "${dir}ip"|grep IPv6|awk '{print $2}'|grep -v "^$"|sort -u|head -n1)
 		if [ ! -z "$serverchan_ipv4" ] && [ "$serverchan_ipv4" -ne "0" ] && [ ! -z "$IPv4" ] && ( ! echo ${IPv4}|grep -w -q ${last_IPv4} ); then
-			echo "`date "+%Y-%m-%d %H:%M:%S"` ${disturb_text}当前IP--${IPv4}" >> ${logfile}
+			echo "`date "+%Y-%m-%d %H:%M:%S"` ${disturb_text}当前IP：${IPv4}" >> ${logfile}
 			echo IPv4 $IPv4 > ${dir}ip && echo -e IPv6 $last_IPv6 >> ${dir}ip
 			title="IP 地址变化"
-			content="${content}${str_splitline}${str_title_start} IP 地址变化${str_title_end}${str_linefeed}${str_tab}当前IP--${IPv4}"
+			content="${content}${str_splitline}${str_title_start} IP 地址变化${str_title_end}${str_linefeed}${str_tab}当前IP：${str_linefeed}${str_tab}${IPv4}"
 		elif [ ! -z "$serverchan_ipv4" ] && [ "$serverchan_ipv4" -ne "0" ] && [ -z "$IPv4" ]; then
 			echo "`date "+%Y-%m-%d %H:%M:%S"` 【！！！】获取 IPv4 地址失败" >> ${logfile}
 		fi
 
 		if [ ! -z "$serverchan_ipv6" ] && [ "$serverchan_ipv6" -ne "0" ] && [ ! -z "$IPv6" ] && ( ! echo "$IPv6"|grep -w -q ${last_IPv6} ); then
-			echo "`date "+%Y-%m-%d %H:%M:%S"` ${disturb_text}当前IPv6--[${IPv6}]:8000" >> ${logfile}
+			echo "`date "+%Y-%m-%d %H:%M:%S"` ${disturb_text}当前IPv6：[${IPv6}]:8000" >> ${logfile}
 			echo IPv4 $IPv4 > ${dir}ip && echo -e IPv6 $IPv6 >> ${dir}ip
 			[ -z "$title" ] && title="IPv6 地址变化"
 			[ ! -z "$title" ] && title="IP 地址变化"
-			content="${content}${str_splitline}${str_title_start} IPv6 地址变化${str_title_end}${str_linefeed}${str_tab}当前IPv6--[${IPv6}]:8000"				
+			content="${content}${str_splitline}${str_title_start} IPv6 地址变化${str_title_end}${str_linefeed}${str_tab}当前IPv6：${str_linefeed}${str_tab}[${IPv6}]:8000"				
 		elif [ ! -z "$serverchan_ipv6" ] && [ "$serverchan_ipv6" -ne "0" ] && [ -z "$IPv6" ]; then
 			echo "`date "+%Y-%m-%d %H:%M:%S"` 【！！！】获取 IPv6 地址失败" >> ${logfile}
 		fi
 
 	else
 		echo "`date "+%Y-%m-%d %H:%M:%S"` ${disturb_text}路由器已经重启!" >> ${logfile}
-		[ ! -z "$serverchan_ipv4" ] && [ "$serverchan_ipv4" -ne "0" ] && echo "`date "+%Y-%m-%d %H:%M:%S"` 当前IP--${IPv4}" >> ${logfile}
-		[ ! -z "$serverchan_ipv6" ] && [ "$serverchan_ipv6" -ne "0" ] && echo "`date "+%Y-%m-%d %H:%M:%S"` 当前IPv6--[${IPv6}]:8000" >> ${logfile}
+		[ ! -z "$serverchan_ipv4" ] && [ "$serverchan_ipv4" -ne "0" ] && echo "`date "+%Y-%m-%d %H:%M:%S"` 当前IP：${IPv4}" >> ${logfile}
+		[ ! -z "$serverchan_ipv6" ] && [ "$serverchan_ipv6" -ne "0" ] && echo "`date "+%Y-%m-%d %H:%M:%S"` 当前IPv6：[${IPv6}]:8000" >> ${logfile}
 		echo IPv4 $IPv4 > ${dir}ip && echo -e IPv6 $IPv6 >> ${dir}ip
 		sleep 10	
 		title="路由器重新启动"
 		content="${content}${str_splitline}${str_title_start} 路由器重新启动${str_title_end}"
-		[ ! -z "$serverchan_ipv4" ] && [ "$serverchan_ipv4" -ne "0" ] && content="${content}${str_linefeed}${str_tab}当前IP--${IPv4}"
-		[ ! -z "$serverchan_ipv6" ] && [ "$serverchan_ipv6" -ne "0" ] && content="${content}${str_linefeed}${str_tab}当前IPv6--[${IPv6}]:8000"
+		[ ! -z "$serverchan_ipv4" ] && [ "$serverchan_ipv4" -ne "0" ] && content="${content}${str_linefeed}${str_tab}当前IP：${str_linefeed}${str_tab}${IPv4}"
+		[ ! -z "$serverchan_ipv6" ] && [ "$serverchan_ipv6" -ne "0" ] && content="${content}${str_linefeed}${str_tab}当前IPv6：${str_linefeed}${str_tab}[${IPv6}]:8000"
 	fi
 
 	if [ ! -z "$content" ] ;then

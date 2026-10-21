@@ -1,175 +1,278 @@
 #!/bin/sh /etc/rc.common
-# Copyright (C) 2023 沉默の金 <cmzj11@gmail.com>
-# Copyright (C) 2022 Lean <coolsnowwolf@gmail.com>
-# Copyright (C) 2019-2021 Tianling Shen <cnsztl@immortalwrt.org>
+# SPDX-License-Identifier: GPL-3.0-only
+# luci-app-turboacc init script (firewall4 / nftables)
 
 START=90
 STOP=10
 
-EXTRA_COMMANDS="check_status"
-EXTRA_HELP="	check_status Check running status of utils"
+EXTRA_COMMANDS="check_status check_applied"
+EXTRA_HELP="	check_status Check running status of utils
+	check_applied Show whether turboacc settings have been applied"
 
 restart_utils="true"
 
-inital_conf(){
-	config_load "turboacc"
-	config_get "hw_wed" "config" "hw_wed" "0"
-	config_get "hw_flow" "config" "hw_flow" "0"
-	config_get "sw_flow" "config" "sw_flow" "0"
-	config_get "sfe_flow" "config" "sfe_flow" "0"
-	config_get "bbr_cca" "config" "bbr_cca" "0"
-	config_get "fullcone_nat" "config" "fullcone_nat" "0"
-	config_get "fullcone6" "config" "fullcone6" "0"
+KMOD_DIR="/lib/modules/$(uname -r)"
 
-	[ ! -e "/lib/modules/$(uname -r)/nft_flow_offload.ko" ] && { sw_flow="0"; hw_flow="0"; }
-	[ ! -e "/lib/modules/$(uname -r)/tcp_bbr.ko" ] && bbr_cca="0"
+has_kmod() {
+	local module="$1"
+	[ -d "/sys/module/${module}" ] || ls "${KMOD_DIR}/${module}.ko"* >/dev/null 2>&1
 }
 
-load_sfe() {
-	local kernel_version=$(uname -r)
-
-	[ -e "/lib/modules/$kernel_version/shortcut-fe-cm.ko" ] && modprobe shortcut-fe-cm
-	[ -e "/lib/modules/$kernel_version/fast-classifier.ko" ] && modprobe fast-classifier
+normalize_config() {
+	uci -q get turboacc.config >/dev/null 2>&1 && return 0
+	uci -q rename turboacc.@turboacc[0]=config 2>/dev/null || uci -q set turboacc.config=turboacc
+	uci -q commit turboacc
 }
 
-unload_sfe() {
-	[ -d /sys/module/shortcut_fe_cm ] && rmmod shortcut_fe_cm
-	[ -d /sys/module/fast_classifier ] && rmmod fast_classifier
+initial_conf() {
+	normalize_config
+	sw_flow="$(uci -q get turboacc.config.sw_flow)"
+	hw_flow="$(uci -q get turboacc.config.hw_flow)"
+	hw_wed="$(uci -q get turboacc.config.hw_wed)"
+	bbr_cca="$(uci -q get turboacc.config.bbr_cca)"
+	fullcone_nat="$(uci -q get turboacc.config.fullcone_nat)"
+	fullcone6="$(uci -q get turboacc.config.fullcone6)"
+
+	# Sanitize values: only "1" enables, anything else (including empty) disables.
+	[ "${sw_flow}"      = "1" ] || sw_flow="0"
+	[ "${hw_flow}"      = "1" ] || hw_flow="0"
+	[ "${hw_wed}"       = "1" ] || hw_wed="0"
+	[ "${bbr_cca}"      = "1" ] || bbr_cca="0"
+	[ "${fullcone_nat}" = "1" ] || fullcone_nat="0"
+	[ "${fullcone6}"    = "1" ] || fullcone6="0"
+
+	logger -t turboacc "read config: sw_flow=${sw_flow}, hw_flow=${hw_flow}, hw_wed=${hw_wed}, fullcone=${fullcone_nat}, fullcone6=${fullcone6}, bbr=${bbr_cca}"
+
+	# firewall4 hard constraint: HW offloading requires SW offloading to be enabled.
+	[ "${sw_flow}" = "0" ] && hw_flow="0"
+
+	# WED depends on HW offloading.
+	[ "${hw_flow}" = "0" ] && hw_wed="0"
+
+	# IPv6 FullCone depends on FullCone NAT.
+	[ "${fullcone_nat}" = "0" ] && fullcone6="0"
+
 }
 
 load_wed() {
-	local kernel_version=$(uname -r)
+	grep -Eq 'mediatek' /etc/openwrt_release || return 0
+	has_kmod "mt7915e" || return 0
 
-	grep -Eq 'mediatek' /etc/openwrt_release && \
-	    ! grep -Eq 'mt7915e' /etc/modules.conf && \
-		[ -e "/lib/modules/$kernel_version/mt7915e.ko" ] && {
-			sed -i '$aoptions mt7915e wed_enable=Y' /etc/modules.conf
-			rmmod mt7915e && sleep 1 && modprobe mt7915e && wifi up
-		}
+	[ -f /etc/modules.conf ] || touch /etc/modules.conf
+	if ! grep -Eq '^options[[:space:]]+mt7915e[[:space:]]+wed_enable=Y' /etc/modules.conf; then
+		# Drop any stale mt7915e options first to avoid duplicates.
+		sed -i '/^options[[:space:]]\+mt7915e/d' /etc/modules.conf
+		echo "options mt7915e wed_enable=Y" >> /etc/modules.conf
+		rmmod mt7915e 2>/dev/null
+		sleep 1
+		modprobe mt7915e
+		wifi up
+	fi
 }
 
 unload_wed() {
-	local kernel_version=$(uname -r)
+	grep -Eq 'mediatek' /etc/openwrt_release || return 0
+	has_kmod "mt7915e" || return 0
 
-	grep -Eq 'mediatek' /etc/openwrt_release && \
-	    grep -Eq 'mt7915e' /etc/modules.conf && \
-		[ -e "/lib/modules/$kernel_version/mt7915e.ko" ] && {
-			sed -i '/mt7915e/d' /etc/modules.conf
-			rmmod mt7915e && sleep 1 && modprobe mt7915e && wifi up
-		}
+	if grep -Eq '^options[[:space:]]+mt7915e' /etc/modules.conf 2>/dev/null; then
+		sed -i '/^options[[:space:]]\+mt7915e/d' /etc/modules.conf
+		rmmod mt7915e 2>/dev/null
+		sleep 1
+		modprobe mt7915e
+		wifi up
+	fi
 }
 
-start(){
-	inital_conf
+apply_firewall_uci() {
+	# Write settings into firewall4 defaults (nftables).
+	uci -q set firewall.@defaults[0].flow_offloading="${sw_flow}"
+	uci -q set firewall.@defaults[0].flow_offloading_hw="${hw_flow}"
+	uci -q set firewall.@defaults[0].fullcone="${fullcone_nat}"
+	uci -q set firewall.@defaults[0].fullcone6="${fullcone6}"
+	logger -t turboacc "write firewall: flow_offloading=${sw_flow}, flow_offloading_hw=${hw_flow}, fullcone=${fullcone_nat}, fullcone6=${fullcone6}, bbr=${bbr_cca}"
 
-	uci set firewall.@defaults[0].flow_offloading="${sw_flow}"
-	uci set firewall.@defaults[0].flow_offloading_hw="${hw_flow}"
-	uci set firewall.@defaults[0].fullcone="${fullcone_nat}"
-	for i in $(uci show firewall|grep "^firewall.@zone\[[0-9]*\]\.fullcone6" |sed  "s/=.*//g"); do
-      uci set "$i"="${fullcone6}"
-    done
-	uci commit firewall
+	# Per-zone IPv6 FullCone toggle (only zones that already declare the option).
+	for i in $(uci -q show firewall | sed -n 's/^\(firewall\.@zone\[[0-9]\+\]\.fullcone6\)=.*/\1/p'); do
+		uci -q set "${i}=${fullcone6}"
+	done
 
-	[ "${sw_flow}" -ne "1" ] && [ "${sfe_flow}" -eq "1" ] && {
-		load_sfe
-	}
-	
-	[ "${hw_flow}" -eq "1" ] && [ "${hw_wed}" -eq "1" ] && {
-		load_wed
-	}
+	uci -q commit firewall
+}
 
-	if [ "${bbr_cca}" -eq "1" ];  then
-		sysctl -w net.ipv4.tcp_congestion_control="bbr"
+apply_bbr() {
+	if [ "${bbr_cca}" = "1" ]; then
+		modprobe tcp_bbr 2>/dev/null
+		if grep -qw bbr /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+			if sysctl -wq net.ipv4.tcp_congestion_control=bbr 2>/dev/null; then
+				logger -t turboacc "write bbr: tcp_congestion_control=bbr"
+			else
+				logger -t turboacc "write bbr failed: sysctl rejected bbr"
+			fi
+		else
+			logger -t turboacc "write bbr skipped: tcp_bbr is not available"
+		fi
 	else
-		sysctl -w net.ipv4.tcp_congestion_control="cubic"
-	fi
-
-	if [ "${restart_utils}" = "true" ]; then
-		echo "DNSMASQ change"
-		/etc/init.d/dnsmasq restart >"/dev/null" 2>&1
-		/etc/init.d/firewall restart >"/dev/null" 2>&1
+		if grep -qw cubic /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+			if sysctl -wq net.ipv4.tcp_congestion_control=cubic 2>/dev/null; then
+				logger -t turboacc "write bbr: tcp_congestion_control=cubic"
+			else
+				logger -t turboacc "write bbr failed: sysctl rejected cubic"
+			fi
+		else
+			logger -t turboacc "write bbr skipped: cubic is not available"
+		fi
 	fi
 }
 
-stop(){
-	inital_conf
+restart_services() {
+	[ "${restart_utils}" = "true" ] || return 0
+	/etc/init.d/dnsmasq  restart >/dev/null 2>&1
+	/etc/init.d/firewall restart >/dev/null 2>&1
+}
 
-	uci set firewall.@defaults[0].flow_offloading="${sw_flow}"
-	uci set firewall.@defaults[0].flow_offloading_hw="${hw_flow}"
-	uci set firewall.@defaults[0].fullcone="${fullcone_nat}"
-	for i in $(uci show firewall|grep "^firewall.@zone\[[0-9]*\]\.fullcone6" |sed  "s/=.*//g"); do
-      uci set "$i"="${fullcone6}"
-    done
-	uci commit firewall
+start() {
+	logger -t turboacc "start: applying firewall4 offloading settings"
+	initial_conf
+	apply_firewall_uci
 
-	[ "${hw_wed}" -eq "0" ] && {
+	if [ "${hw_flow}" = "1" ] && [ "${hw_wed}" = "1" ]; then
+		load_wed
+	fi
+
+	apply_bbr
+	restart_services
+}
+
+boot() {
+	start
+}
+
+stop() {
+	logger -t turboacc "stop: applying current disabled/enabled settings"
+	# When stopping the service we still write the user's current preference
+	# into firewall (so disabling the toggle takes effect) and unload WED if
+	# the user disabled it.
+	initial_conf
+	apply_firewall_uci
+
+	if [ "${hw_wed}" = "0" ]; then
 		unload_wed
+	fi
+
+	restart_services
+}
+
+restart() {
+	logger -t turboacc "restart: reloading acceleration settings"
+	initial_conf
+	apply_firewall_uci
+
+	if [ "${hw_flow}" = "1" ] && [ "${hw_wed}" = "1" ]; then
+		load_wed
+	else
+		unload_wed
+	fi
+
+	apply_bbr
+	/etc/init.d/dnsmasq  restart >/dev/null 2>&1
+	/etc/init.d/firewall restart >/dev/null 2>&1
+}
+
+reload() {
+	# "Save & Apply" in LuCI maps to reload via ucitrack.
+	restart
+}
+
+check_applied() {
+	initial_conf
+	current_bbr="$(cat /proc/sys/net/ipv4/tcp_congestion_control 2>/dev/null)"
+
+	[ "$(uci -q get firewall.@defaults[0].flow_offloading)" = "${sw_flow}" ] || {
+		printf '%s\n' "turboacc settings are not applied"
+		return 1
 	}
 
-	unload_sfe
+	[ "$(uci -q get firewall.@defaults[0].flow_offloading_hw)" = "${hw_flow}" ] || {
+		printf '%s\n' "turboacc settings are not applied"
+		return 1
+	}
 
-	if [ "${restart_utils}" = "true" ]; then
-		echo "DNSMASQ revert"
-		/etc/init.d/dnsmasq restart >"/dev/null" 2>&1
-		/etc/init.d/firewall restart >"/dev/null" 2>&1
+	[ "$(uci -q get firewall.@defaults[0].fullcone)" = "${fullcone_nat}" ] || {
+		printf '%s\n' "turboacc settings are not applied"
+		return 1
+	}
+
+	[ "$(uci -q get firewall.@defaults[0].fullcone6)" = "${fullcone6}" ] || {
+		printf '%s\n' "turboacc settings are not applied"
+		return 1
+	}
+
+	if [ "${bbr_cca}" = "1" ] && [ "${current_bbr}" != "bbr" ]; then
+		printf '%s\n' "turboacc settings are not applied"
+		return 1
 	fi
+
+	if [ "${bbr_cca}" = "0" ] && [ "${current_bbr}" = "bbr" ]; then
+		printf '%s\n' "turboacc settings are not applied"
+		return 1
+	fi
+
+	printf '%s\n' "turboacc settings are applied"
+	return 0
 }
 
-restart(){
-	restart_utils="false"
+check_status() {
+	local target="$1"
+	local emit_msg="${2:-1}"
 
-	stop
-	start
-
-	echo "DNSMASQ restart"
-	/etc/init.d/dnsmasq restart >"/dev/null" 2>&1
-	/etc/init.d/firewall restart >"/dev/null" 2>&1
-}
-
-check_status(){
-	case "$1" in
-	"fastpath")
-		if [ "$(cat "/sys/module/nft_flow_offload/refcnt" 2>"/dev/null" || echo -1)" -gt "0" ]; then
-			msg="Flow Offloading"
-			exit_code=0
-		elif [ "$(cat "/sys/module/nft_flow_offload/refcnt" 2>"/dev/null")" -eq "0" ] && \
-		    [ -e /sys/kernel/debug/hnat/hnat_version ]; then
-			msg="MediaTek HWNAT"
-			exit_code=0
-		elif [ -d /sys/kernel/debug/ecm/ecm_nss_ipv4 ]; then
-			msg="QCA-NSS-ECM"
-			exit_code=0
-		elif [ -d /sys/kernel/debug/ecm/ecm_sfe_ipv4 ]; then
-			msg="QCA-ECM-SFE"
-			exit_code=0
-		elif [ -d /sys/module/fast_classifier ]; then
-			msg="Shortcut-FE"
-			exit_code=0
-		elif [ -d /sys/module/shortcut_fe_cm ]; then
-			msg="Shortcut-FE ECM"
-			exit_code=0
-		else
-			msg=""
-			exit_code=1
-		fi
-		;;
-	"fullconenat")
-    	if [ "$(cat "/sys/module/nft_fullcone/refcnt" 2>"/dev/null" || echo -1)" -gt "0" ]; then
-			exit_code=0
-		else
-			exit_code=1
-		fi
-		;;
-	"bbr")
-		[ "x$(cat "/proc/sys/net/ipv4/tcp_congestion_control" 2>"/dev/null")" = "xbbr" ] && \
-			exit 0 || exit 1
-		;;
-	*)
-		exit 2
-		;;
+	case "${target}" in
+		fastpath)
+			if [ "$(uci -q get firewall.@defaults[0].flow_offloading_hw)" = "1" ]; then
+				msg="Hardware Flow Offloading"
+				exit_code=0
+			elif [ "$(uci -q get firewall.@defaults[0].flow_offloading)" = "1" ]; then
+				msg="Software Flow Offloading"
+				exit_code=0
+			else
+				msg=""
+				exit_code=1
+			fi
+			;;
+		sw_flow)
+			if [ "$(uci -q get firewall.@defaults[0].flow_offloading)" = "1" ]; then
+				exit_code=0
+			else
+				exit_code=1
+			fi
+			;;
+		hw_flow)
+			if [ "$(uci -q get firewall.@defaults[0].flow_offloading_hw)" = "1" ]; then
+				exit_code=0
+			else
+				exit_code=1
+			fi
+			;;
+		fullconenat)
+			if [ "$(uci -q get firewall.@defaults[0].fullcone)" = "1" ]; then
+				exit_code=0
+			else
+				exit_code=1
+			fi
+			;;
+		bbr)
+			if [ "$(cat /proc/sys/net/ipv4/tcp_congestion_control 2>/dev/null)" = "bbr" ]; then
+				exit_code=0
+			else
+				exit_code=1
+			fi
+			;;
+		*)
+			exit 2
+			;;
 	esac
-	if [ "$msg" != "" ] && { [ $# = 1 ] || { [ $# = 2 ] && [ "$2" = 1 ]; }; }; then
-    	echo -n "$msg"
+
+	if [ -n "${msg}" ] && [ "${emit_msg}" = "1" ]; then
+		printf '%s' "${msg}"
 	fi
-	exit "$exit_code"
+	exit "${exit_code}"
 }

@@ -321,3 +321,54 @@ msgstr "插件 Host Header 重写"
 
 msgid "plugin_header_X-From-Where"
 msgstr "插件X-From-Where请求头"
+
+msgid "Clear Log"
+msgstr "清空日志"
+
+msgid "Authentication"
+msgstr "认证设置"
+
+msgid "Authentication Method"
+msgstr "认证方式"
+
+msgid "Select the authentication method used to connect to frps. Token is the traditional method. OIDC requires an OIDC provider."
+msgstr "选择连接到 frps 服务端时使用的认证方式。令牌(Token)是传统认证方式，OIDC 需要 OIDC 服务提供商。"
+
+msgid "Token Authentication"
+msgstr "令牌(Token)认证"
+
+msgid "OIDC Authentication"
+msgstr "OIDC 认证"
+
+msgid "OIDC Client ID"
+msgstr "OIDC 客户端 ID"
+
+msgid "The client ID registered at the OIDC provider."
+msgstr "在 OIDC 服务提供商处注册的客户端 ID。"
+
+msgid "OIDC Client Secret"
+msgstr "OIDC 客户端密钥"
+
+msgid "The client secret issued by the OIDC provider."
+msgstr "OIDC 服务提供商签发的客户端密钥。"
+
+msgid "The client secret issued by the OIDC provider. Leave empty if your OIDC provider does not require it."
+msgstr "OIDC 服务提供商签发的客户端密钥。如果您的 OIDC 服务提供商不要求则留空。"
+
+msgid "OIDC Token Endpoint URL"
+msgstr "OIDC 令牌端点 URL"
+
+msgid "The token endpoint URL of the OIDC provider, e.g. https://example.com/oidc/token"
+msgstr "OIDC 服务提供商的令牌端点 URL，例如 https://example.com/oidc/token"
+
+msgid "OIDC Audience"
+msgstr "OIDC 受众(Audience)"
+
+msgid "The audience claim expected by the OIDC provider."
+msgstr "OIDC 服务提供商期望的受众(audience)声明。"
+
+msgid "OIDC Scope"
+msgstr "OIDC 作用域(Scope)"
+
+msgid "The scope to request from the OIDC provider."
+msgstr "向 OIDC 服务提供商请求的作用域(scope)。"
